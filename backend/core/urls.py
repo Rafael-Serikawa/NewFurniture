@@ -7,5 +7,9 @@ router = DefaultRouter()
 
 urlpatterns = [
     path('status/', views.status_api, name='status'),
+    path('auth/registro/', views.registro, name='registro'),
+    path('auth/login/', views.login, name='login'),
+    path('auth/logout/', views.logout, name='logout'),
+    path('auth/eu/', views.eu, name='eu'),
     path('', include(router.urls)),
 ]
