@@ -4,6 +4,7 @@ from rest_framework.routers import DefaultRouter
 from . import views
 
 router = DefaultRouter()
+router.register('necessidades', views.NecessidadeViewSet, basename='necessidade')
 
 urlpatterns = [
     path('status/', views.status_api, name='status'),

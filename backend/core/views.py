@@ -1,14 +1,18 @@
 """API REST do NewFurniture (Django REST Framework)."""
 
 from django.contrib.auth import authenticate
-from rest_framework import status
+from django.db.models import Q
+from rest_framework import mixins, status, viewsets
 from rest_framework.authtoken.models import Token
 from rest_framework.decorators import api_view, authentication_classes, permission_classes
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 
-from .models import Cliente, Designer, Marceneiro, Usuario
-from .serializers import LoginSerializer, RegistroSerializer, UsuarioSerializer
+from . import services
+from .models import Cliente, Designer, Marceneiro, Necessidade, Usuario
+from .permissions import EhCliente
+from .serializers import (LoginSerializer, NecessidadeSerializer, RegistroSerializer,
+                          UsuarioSerializer)
 
 T = Usuario.Tipo
 
@@ -69,6 +73,55 @@ def _papel(request):
     if user.is_staff and not user.tipo:
         return 'ADMIN'
     return user.tipo
+
+
+# ---------------------------------------------------------------------------
+# Necessidades (NEC001)
+# ---------------------------------------------------------------------------
+class NecessidadeViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
+                         mixins.CreateModelMixin, viewsets.GenericViewSet):
+    """
+    list:     cliente -> suas necessidades; designer -> mural (abertas + as que propôs)
+    create:   cliente cadastra uma nova necessidade (multipart, com fotos)
+    retrieve: detalhe com as propostas recebidas
+    """
+
+    def get_serializer_class(self):
+        return NecessidadeSerializer
+
+    def get_permissions(self):
+        if self.action == 'create':
+            return [IsAuthenticated(), EhCliente()]
+        return [IsAuthenticated()]
+
+    def get_queryset(self):
+        papel = _papel(self.request)
+        qs = Necessidade.objects.select_related('cliente')
+        if papel == T.CLIENTE:
+            qs = qs.filter(cliente_id=self.request.user.pk)
+        elif papel == T.DESIGNER:
+            qs = qs.filter(Q(estado=Necessidade.Estado.ABERTA) |
+                           Q(propostas__designer_id=self.request.user.pk)).distinct()
+        elif papel != 'ADMIN':
+            qs = qs.none()
+
+        params = self.request.query_params
+        if params.get('estado'):
+            qs = qs.filter(estado=params['estado'].upper())
+        if params.get('tipo_ambiente'):
+            qs = qs.filter(tipo_ambiente=params['tipo_ambiente'].upper())
+        if params.get('cidade'):
+            qs = qs.filter(cidade__icontains=params['cidade'])
+        if params.get('busca'):
+            qs = qs.filter(Q(titulo__icontains=params['busca']) | Q(codigo__icontains=params['busca']))
+        return qs
+
+    def perform_create(self, serializer):
+        necessidade = serializer.save(cliente_id=self.request.user.pk)
+        # NEC001 passo 8: a necessidade fica visível para a rede de designers
+        services.notificar(list(Designer.objects.all()),
+                           f'Nova necessidade publicada: "{necessidade.titulo}" ({necessidade.cidade}).',
+                           f'/projetos/{necessidade.pk}')
 
 
 @api_view(['GET'])

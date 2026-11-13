@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from .models import Marceneiro, Usuario
+from .models import Marceneiro, Necessidade, OrdemServico, PropostaTecnica, Usuario
 
 
 def _dinheiro(**kwargs):
@@ -50,3 +50,60 @@ class RegistroSerializer(serializers.Serializer):
 class LoginSerializer(serializers.Serializer):
     email = serializers.CharField()
     senha = serializers.CharField(write_only=True)
+
+
+# ---------------------------------------------------------------------------
+# Necessidade (NEC001)
+# ---------------------------------------------------------------------------
+class NecessidadeSerializer(serializers.ModelSerializer):
+    tipo_ambiente_display = serializers.CharField(source='get_tipo_ambiente_display', read_only=True)
+    estado_display = serializers.CharField(source='get_estado_display', read_only=True)
+    cliente_nome = serializers.CharField(source='cliente.nome', read_only=True)
+    total_propostas = serializers.SerializerMethodField()
+    propostas_submetidas = serializers.SerializerMethodField()
+    ja_propus = serializers.SerializerMethodField()
+    ordem_id = serializers.SerializerMethodField()
+    ordem_estado = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Necessidade
+        fields = ['id', 'codigo', 'titulo', 'cidade', 'tipo_ambiente', 'tipo_ambiente_display',
+                  'largura', 'altura', 'profundidade', 'foto_ambiente', 'esboco_movel',
+                  'observacoes', 'custo_esperado', 'estado', 'estado_display', 'criado_em',
+                  'cliente_nome', 'total_propostas', 'propostas_submetidas', 'ja_propus',
+                  'ordem_id', 'ordem_estado']
+        read_only_fields = ['codigo', 'estado', 'criado_em']
+
+    def get_total_propostas(self, obj):
+        return obj.propostas.count()
+
+    def get_propostas_submetidas(self, obj):
+        return obj.propostas.filter(estado=PropostaTecnica.Estado.SUBMETIDA).count()
+
+    def get_ja_propus(self, obj):
+        user = _usuario_logado(self)
+        if not user or user.tipo != Usuario.Tipo.DESIGNER:
+            return False
+        return obj.propostas.filter(designer_id=user.pk).exists()
+
+    def _ordem(self, obj):
+        return OrdemServico.objects.filter(proposta_tecnica__necessidade=obj).first()
+
+    def get_ordem_id(self, obj):
+        ordem = self._ordem(obj)
+        return ordem.pk if ordem else None
+
+    def get_ordem_estado(self, obj):
+        ordem = self._ordem(obj)
+        return ordem.estado if ordem else None
+
+
+class NecessidadeResumoSerializer(serializers.ModelSerializer):
+    tipo_ambiente_display = serializers.CharField(source='get_tipo_ambiente_display', read_only=True)
+    cliente_nome = serializers.CharField(source='cliente.nome', read_only=True)
+
+    class Meta:
+        model = Necessidade
+        fields = ['id', 'codigo', 'titulo', 'cidade', 'tipo_ambiente', 'tipo_ambiente_display',
+                  'largura', 'altura', 'profundidade', 'foto_ambiente', 'esboco_movel',
+                  'observacoes', 'custo_esperado', 'estado', 'cliente_nome']
