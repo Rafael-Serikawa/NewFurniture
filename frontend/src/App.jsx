@@ -5,10 +5,12 @@ import { Carregando } from './components/ui'
 import { casar, navegar, useRota } from './router'
 import Cadastro from './pages/Cadastro'
 import Login from './pages/Login'
+import MeusPedidos from './pages/MeusPedidos'
 import Sobre from './pages/Sobre'
 
 // [padrão, componente, perfis permitidos (vazio = qualquer usuário logado)]
 const ROTAS = [
+  ['/pedidos', MeusPedidos, ['CLIENTE']],
 ]
 
 function Redirecionar({ para }) {
