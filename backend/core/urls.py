@@ -5,6 +5,7 @@ from . import views
 
 router = DefaultRouter()
 router.register('necessidades', views.NecessidadeViewSet, basename='necessidade')
+router.register('propostas-tecnicas', views.PropostaTecnicaViewSet, basename='proposta-tecnica')
 
 urlpatterns = [
     path('status/', views.status_api, name='status'),

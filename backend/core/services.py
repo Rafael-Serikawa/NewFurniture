@@ -15,7 +15,7 @@ Cada função corresponde a um caso de uso da especificação v1.3:
 
 from rest_framework.exceptions import ValidationError
 
-from .models import Notificacao
+from .models import Necessidade, Notificacao
 
 
 # ---------------------------------------------------------------------------
@@ -38,3 +38,20 @@ def _link_ordem(ordem):
 def _exigir(condicao, mensagem):
     if not condicao:
         raise ValidationError({'detail': mensagem})
+
+
+# ---------------------------------------------------------------------------
+# DES001 - Inclusão de desenho técnico
+# ---------------------------------------------------------------------------
+def validar_nova_proposta_tecnica(necessidade, designer):
+    _exigir(necessidade.estado == Necessidade.Estado.ABERTA,
+            'Esta necessidade não está mais aberta para propostas.')
+    _exigir(not necessidade.propostas.filter(designer_id=designer.pk).exists(),
+            'Você já enviou uma proposta para esta necessidade.')
+
+
+def pos_submeter_proposta_tecnica(proposta):
+    necessidade = proposta.necessidade
+    notificar(necessidade.cliente,
+              f'Nova proposta de {proposta.designer.nome} para "{necessidade.titulo}".',
+              f'/pedidos/{necessidade.pk}')

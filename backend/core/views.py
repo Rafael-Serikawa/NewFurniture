@@ -1,17 +1,21 @@
 """API REST do NewFurniture (Django REST Framework)."""
+import json
 
 from django.contrib.auth import authenticate
+from django.db import transaction
 from django.db.models import Q
 from rest_framework import mixins, status, viewsets
 from rest_framework.authtoken.models import Token
 from rest_framework.decorators import api_view, authentication_classes, permission_classes
+from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 
 from . import services
-from .models import Cliente, Designer, Marceneiro, Necessidade, Usuario
-from .permissions import EhCliente
-from .serializers import (LoginSerializer, NecessidadeSerializer, RegistroSerializer,
+from .models import Cliente, Designer, Marceneiro, Necessidade, PropostaTecnica, Usuario
+from .permissions import EhCliente, EhDesigner
+from .serializers import (LoginSerializer, MaterialSerializer, NecessidadeDetalheSerializer,
+                          NecessidadeSerializer, PropostaTecnicaSerializer, RegistroSerializer,
                           UsuarioSerializer)
 
 T = Usuario.Tipo
@@ -87,7 +91,7 @@ class NecessidadeViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
     """
 
     def get_serializer_class(self):
-        return NecessidadeSerializer
+        return NecessidadeDetalheSerializer if self.action == 'retrieve' else NecessidadeSerializer
 
     def get_permissions(self):
         if self.action == 'create':
@@ -122,6 +126,59 @@ class NecessidadeViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
         services.notificar(list(Designer.objects.all()),
                            f'Nova necessidade publicada: "{necessidade.titulo}" ({necessidade.cidade}).',
                            f'/projetos/{necessidade.pk}')
+
+
+# ---------------------------------------------------------------------------
+# Propostas técnicas (DES001 / APR001)
+# ---------------------------------------------------------------------------
+class PropostaTecnicaViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
+                             mixins.CreateModelMixin, viewsets.GenericViewSet):
+    serializer_class = PropostaTecnicaSerializer
+
+    def get_permissions(self):
+        if self.action == 'create':
+            return [IsAuthenticated(), EhDesigner()]
+        return [IsAuthenticated()]
+
+    def get_queryset(self):
+        papel = _papel(self.request)
+        qs = PropostaTecnica.objects.select_related('designer', 'necessidade') \
+            .prefetch_related('materiais')
+        if papel == T.DESIGNER:
+            qs = qs.filter(designer_id=self.request.user.pk)
+        elif papel == T.CLIENTE:
+            qs = qs.filter(necessidade__cliente_id=self.request.user.pk)
+        elif papel != 'ADMIN':
+            qs = qs.none()
+        if self.request.query_params.get('estado'):
+            qs = qs.filter(estado=self.request.query_params['estado'].upper())
+        return qs
+
+    def create(self, request, *args, **kwargs):
+        """Recebe multipart: desenho_tecnico (arquivo), dados da proposta e
+        'materiais' como uma lista JSON [{tipo_material, descricao, quantidade,
+        unidade, custo_unitario}, ...]."""
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        bruto = request.data.get('materiais', '[]')
+        try:
+            materiais = json.loads(bruto) if isinstance(bruto, str) else bruto
+        except ValueError:
+            raise ValidationError({'materiais': ['Lista de materiais em formato inválido.']})
+        if not isinstance(materiais, list) or not materiais:
+            raise ValidationError({'materiais': ['Informe ao menos um material.']})
+        materiais_ser = MaterialSerializer(data=materiais, many=True)
+        materiais_ser.is_valid(raise_exception=True)
+
+        necessidade = serializer.validated_data['necessidade']
+        services.validar_nova_proposta_tecnica(necessidade, request.user)
+        with transaction.atomic():
+            proposta = serializer.save(designer_id=request.user.pk)
+            materiais_ser.save(proposta=proposta)
+        services.pos_submeter_proposta_tecnica(proposta)
+        saida = self.get_serializer(PropostaTecnica.objects.get(pk=proposta.pk))
+        return Response(saida.data, status=status.HTTP_201_CREATED)
 
 
 @api_view(['GET'])
