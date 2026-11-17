@@ -1,6 +1,7 @@
 from rest_framework import serializers
 
-from .models import Marceneiro, Material, Necessidade, OrdemServico, PropostaTecnica, Usuario
+from .models import (Marceneiro, Material, Necessidade, OrdemServico, Pagamento, PropostaTecnica,
+                     Usuario)
 
 
 def _dinheiro(**kwargs):
@@ -169,3 +170,23 @@ class NecessidadeDetalheSerializer(NecessidadeSerializer):
         elif not (user and (user.is_staff or obj.cliente_id == user.pk)):
             qs = qs.none()
         return PropostaTecnicaSerializer(qs, many=True, context=self.context).data
+
+
+# ---------------------------------------------------------------------------
+# Pagamento
+# ---------------------------------------------------------------------------
+class PagamentoSerializer(serializers.ModelSerializer):
+    tipo_servico_display = serializers.CharField(source='get_tipo_servico_display', read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+
+    class Meta:
+        model = Pagamento
+        fields = ['id', 'tipo_servico', 'tipo_servico_display', 'valor', 'status', 'status_display',
+                  'nome_titular', 'cartao_final', 'data_transacao']
+
+
+class DadosPagamentoSerializer(serializers.Serializer):
+    nome_titular = serializers.CharField(max_length=100)
+    numero_cartao = serializers.CharField(max_length=25)
+    validade = serializers.CharField(max_length=5)
+    cvv = serializers.CharField(max_length=4)

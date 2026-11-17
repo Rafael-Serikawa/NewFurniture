@@ -6,7 +6,8 @@ from django.db import transaction
 from django.db.models import Q
 from rest_framework import mixins, status, viewsets
 from rest_framework.authtoken.models import Token
-from rest_framework.decorators import api_view, authentication_classes, permission_classes
+from rest_framework.decorators import (action, api_view, authentication_classes,
+                                       permission_classes)
 from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
@@ -14,9 +15,9 @@ from rest_framework.response import Response
 from . import services
 from .models import Cliente, Designer, Marceneiro, Necessidade, PropostaTecnica, Usuario
 from .permissions import EhCliente, EhDesigner
-from .serializers import (LoginSerializer, MaterialSerializer, NecessidadeDetalheSerializer,
-                          NecessidadeSerializer, PropostaTecnicaSerializer, RegistroSerializer,
-                          UsuarioSerializer)
+from .serializers import (DadosPagamentoSerializer, LoginSerializer, MaterialSerializer,
+                          NecessidadeDetalheSerializer, NecessidadeSerializer, PagamentoSerializer,
+                          PropostaTecnicaSerializer, RegistroSerializer, UsuarioSerializer)
 
 T = Usuario.Tipo
 
@@ -138,6 +139,8 @@ class PropostaTecnicaViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
     def get_permissions(self):
         if self.action == 'create':
             return [IsAuthenticated(), EhDesigner()]
+        if self.action == 'aprovar':
+            return [IsAuthenticated(), EhCliente()]
         return [IsAuthenticated()]
 
     def get_queryset(self):
@@ -179,6 +182,21 @@ class PropostaTecnicaViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
         services.pos_submeter_proposta_tecnica(proposta)
         saida = self.get_serializer(PropostaTecnica.objects.get(pk=proposta.pk))
         return Response(saida.data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=['post'])
+    def aprovar(self, request, pk=None):
+        """APR001: aprova a proposta e processa o pagamento (checkout)."""
+        proposta = self.get_object()
+        dados = DadosPagamentoSerializer(data=request.data)
+        dados.is_valid(raise_exception=True)
+        pagamento, ordem = services.aprovar_proposta_tecnica(proposta, request.user, dados.validated_data)
+        if ordem is None:
+            return Response({
+                'detail': 'Pagamento recusado pela operadora. Tente outro cartão.',
+                'pagamento': PagamentoSerializer(pagamento).data,
+            }, status=status.HTTP_402_PAYMENT_REQUIRED)
+        return Response({'pagamento': PagamentoSerializer(pagamento).data, 'ordem_id': ordem.pk},
+                        status=status.HTTP_201_CREATED)
 
 
 @api_view(['GET'])
