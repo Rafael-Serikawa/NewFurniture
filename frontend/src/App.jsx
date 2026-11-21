@@ -4,6 +4,7 @@ import Navbar from './components/Navbar'
 import { Carregando } from './components/ui'
 import { casar, navegar, useRota } from './router'
 import Cadastro from './pages/Cadastro'
+import Historico from './pages/Historico'
 import Login from './pages/Login'
 import { MeusProjetos, OrdensDisponiveis } from './pages/Marceneiro'
 import MeusPedidos from './pages/MeusPedidos'
@@ -24,6 +25,7 @@ const ROTAS = [
   ['/ordens-disponiveis', OrdensDisponiveis, ['MARCENEIRO']],
   ['/meus-projetos', MeusProjetos, ['MARCENEIRO']],
   ['/ordens/:id', OrdemDetalhe, []],
+  ['/historico', Historico, []],
 ]
 
 function Redirecionar({ para }) {
