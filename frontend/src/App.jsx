@@ -5,8 +5,10 @@ import { Carregando } from './components/ui'
 import { casar, navegar, useRota } from './router'
 import Cadastro from './pages/Cadastro'
 import Login from './pages/Login'
+import { MeusProjetos, OrdensDisponiveis } from './pages/Marceneiro'
 import MeusPedidos from './pages/MeusPedidos'
 import MinhasPropostas from './pages/MinhasPropostas'
+import OrdemDetalhe from './pages/OrdemDetalhe'
 import PedidoDetalhe from './pages/PedidoDetalhe'
 import ProjetoDesigner from './pages/ProjetoDesigner'
 import ProjetosDisponiveis from './pages/ProjetosDisponiveis'
@@ -19,6 +21,9 @@ const ROTAS = [
   ['/projetos', ProjetosDisponiveis, ['DESIGNER']],
   ['/projetos/:id', ProjetoDesigner, ['DESIGNER']],
   ['/minhas-propostas', MinhasPropostas, ['DESIGNER']],
+  ['/ordens-disponiveis', OrdensDisponiveis, ['MARCENEIRO']],
+  ['/meus-projetos', MeusProjetos, ['MARCENEIRO']],
+  ['/ordens/:id', OrdemDetalhe, []],
 ]
 
 function Redirecionar({ para }) {
