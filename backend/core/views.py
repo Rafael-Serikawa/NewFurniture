@@ -12,14 +12,15 @@ from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 
-from . import analitico, services
-from .models import (Cliente, Designer, Marceneiro, Necessidade, Notificacao, OrcamentoFinal,
-                     OrdemServico, PropostaTecnica, Usuario)
-from .permissions import EhCliente, EhDesigner
+from . import services
+from .models import (Cliente, Designer, Marceneiro, Necessidade, Notificacao, OrdemServico,
+                     Pagamento, PropostaTecnica, Usuario)
+from .permissions import EhCliente, EhDesigner, EhMarceneiro
 from .serializers import (DadosPagamentoSerializer, LoginSerializer, MaterialSerializer,
                           NecessidadeDetalheSerializer, NecessidadeSerializer,
-                          NotificacaoSerializer, OrcamentoFinalDetalheSerializer,
-                          OrcamentoFinalSerializer, PagamentoSerializer, PropostaTecnicaSerializer,
+                          NotificacaoSerializer, OrdemServicoDetalheSerializer,
+                          OrdemServicoSerializer, PagamentoSerializer, PropostaEntregaSerializer,
+                          PropostaMarcenariaSerializer, PropostaTecnicaSerializer,
                           RegistroSerializer, UsuarioSerializer)
 
 T = Usuario.Tipo
@@ -203,61 +204,127 @@ class PropostaTecnicaViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
 
 
 # ---------------------------------------------------------------------------
-# Orçamento final (entidade multidimensional) e totalizações
+# Ordens de serviço (MAR001, MAR002, ENT001, ENT002)
 # ---------------------------------------------------------------------------
-class OrcamentoFinalViewSet(viewsets.ReadOnlyModelViewSet):
+class OrdemServicoViewSet(viewsets.ReadOnlyModelViewSet):
+    ACOES_CLIENTE = {'escolher_marceneiro', 'avaliar_entrega', 'confirmar_recebimento', 'redirecionar'}
+    ACOES_MARCENEIRO = {'propor_execucao', 'iniciar_usinagem', 'recusar', 'finalizar', 'propor_entrega'}
 
     def get_serializer_class(self):
-        return OrcamentoFinalDetalheSerializer if self.action == 'retrieve' else OrcamentoFinalSerializer
+        return OrdemServicoSerializer if self.action == 'list' else OrdemServicoDetalheSerializer
+
+    def get_permissions(self):
+        if self.action in self.ACOES_CLIENTE:
+            return [IsAuthenticated(), EhCliente()]
+        if self.action in self.ACOES_MARCENEIRO:
+            return [IsAuthenticated(), EhMarceneiro()]
+        return [IsAuthenticated()]
 
     def get_queryset(self):
         user = self.request.user
         papel = _papel(self.request)
-        qs = OrcamentoFinal.objects.select_related(
-            'ordem__marceneiro', 'ordem__proposta_tecnica__designer',
-            'ordem__proposta_tecnica__necessidade__cliente',
-        ).prefetch_related('ordem__proposta_tecnica__materiais').order_by('-ordem__criado_em', '-id')
+        qs = OrdemServico.objects.select_related(
+            'marceneiro', 'proposta_tecnica__designer', 'proposta_tecnica__necessidade__cliente')
         if papel == T.CLIENTE:
-            qs = qs.filter(ordem__proposta_tecnica__necessidade__cliente_id=user.pk)
+            qs = qs.filter(proposta_tecnica__necessidade__cliente_id=user.pk)
         elif papel == T.DESIGNER:
-            qs = qs.filter(ordem__proposta_tecnica__designer_id=user.pk)
+            qs = qs.filter(proposta_tecnica__designer_id=user.pk)
         elif papel == T.MARCENEIRO:
-            qs = qs.filter(ordem__marceneiro_id=user.pk)
+            qs = qs.filter(
+                Q(marceneiro_id=user.pk) |
+                Q(estado=OrdemServico.Estado.PENDENTE, marceneiro__isnull=True) |
+                Q(propostas_marcenaria__marceneiro_id=user.pk)
+            ).distinct()
         elif papel != 'ADMIN':
             qs = qs.none()
-        if self.request.query_params.get('incluir_cancelados') != '1':
-            qs = qs.exclude(ordem__estado=OrdemServico.Estado.CANCELADA)
+
+        escopo = self.request.query_params.get('escopo')
+        if escopo == 'disponiveis':
+            qs = qs.filter(estado=OrdemServico.Estado.PENDENTE, marceneiro__isnull=True)
+        elif escopo == 'meus':
+            qs = qs.filter(marceneiro_id=user.pk).exclude(estado=OrdemServico.Estado.ENTREGUE)
+        elif escopo == 'ativos':
+            qs = qs.exclude(estado=OrdemServico.Estado.ENTREGUE)
+        elif escopo == 'historico':
+            qs = qs.filter(estado=OrdemServico.Estado.ENTREGUE)
+            if papel == T.MARCENEIRO:
+                qs = qs.filter(marceneiro_id=user.pk)
         return qs
 
-    @action(detail=False)
-    def totalizacao(self, request):
-        """GET /api/orcamentos/totalizacao/?dimensao=tipo_ambiente"""
-        dimensao = request.query_params.get('dimensao', 'tipo_ambiente')
-        try:
-            dados = analitico.totalizar(self.get_queryset(), dimensao)
-        except ValueError as erro:
-            raise ValidationError({'detail': str(erro)})
-        return Response(dados)
+    def _detalhe(self, ordem, status_code=status.HTTP_200_OK):
+        ordem = OrdemServico.objects.get(pk=ordem.pk)  # recarrega o estado atualizado
+        return Response(OrdemServicoDetalheSerializer(ordem, context=self.get_serializer_context()).data,
+                        status=status_code)
 
-    @action(detail=False)
-    def cubo(self, request):
-        """GET /api/orcamentos/cubo/?linhas=tipo_ambiente&colunas=estado&medida=preco_total"""
-        p = request.query_params
-        try:
-            dados = analitico.cubo(self.get_queryset(), p.get('linhas', 'tipo_ambiente'),
-                                   p.get('colunas', 'estado'), p.get('medida', 'preco_total'))
-        except ValueError as erro:
-            raise ValidationError({'detail': str(erro)})
-        return Response(dados)
+    # --- concorrência entre marceneiros ---
+    @action(detail=True, methods=['post'], url_path='propor-execucao')
+    def propor_execucao(self, request, pk=None):
+        ordem = self.get_object()
+        ser = PropostaMarcenariaSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        services.propor_execucao(ordem, request.user, ser.validated_data)
+        return self._detalhe(ordem, status.HTTP_201_CREATED)
 
-    @action(detail=False)
-    def dimensoes(self, request):
-        """Lista as dimensões e medidas disponíveis para montar o cubo."""
-        return Response({
-            'dimensoes': [{'chave': k, 'rotulo': v} for k, v in analitico.DIMENSOES.items()],
-            'medidas': [{'chave': k, 'rotulo': v} for k, v in analitico.MEDIDAS.items()],
-            'medidas_material': analitico.MEDIDAS_MATERIAL,
-        })
+    @action(detail=True, methods=['post'], url_path='escolher-marceneiro')
+    def escolher_marceneiro(self, request, pk=None):
+        ordem = self.get_object()
+        dados = DadosPagamentoSerializer(data=request.data)
+        dados.is_valid(raise_exception=True)
+        try:
+            proposta_id = int(request.data.get('proposta_marcenaria'))
+        except (TypeError, ValueError):
+            raise ValidationError({'proposta_marcenaria': ['Escolha uma proposta.']})
+        pagamento = services.escolher_marceneiro(ordem, request.user, proposta_id, dados.validated_data)
+        if pagamento.status != Pagamento.Status.APROVADO:
+            return Response({
+                'detail': 'Pagamento recusado pela operadora. Tente outro cartão.',
+                'pagamento': PagamentoSerializer(pagamento).data,
+            }, status=status.HTTP_402_PAYMENT_REQUIRED)
+        return self._detalhe(ordem)
+
+    # --- MAR001 ---
+    @action(detail=True, methods=['post'], url_path='iniciar-usinagem')
+    def iniciar_usinagem(self, request, pk=None):
+        ordem = services.iniciar_usinagem(self.get_object(), request.user)
+        return self._detalhe(ordem)
+
+    @action(detail=True, methods=['post'])
+    def recusar(self, request, pk=None):
+        ordem = services.recusar_ordem(self.get_object(), request.user, request.data.get('motivo', ''))
+        return self._detalhe(ordem)
+
+    @action(detail=True, methods=['post'])
+    def redirecionar(self, request, pk=None):
+        ordem = services.redirecionar_ordem(self.get_object(), request.user)
+        return self._detalhe(ordem)
+
+    # --- MAR002 ---
+    @action(detail=True, methods=['post'])
+    def finalizar(self, request, pk=None):
+        ordem = services.finalizar_fabricacao(self.get_object(), request.user)
+        return self._detalhe(ordem)
+
+    # --- ENT001 ---
+    @action(detail=True, methods=['post'], url_path='propor-entrega')
+    def propor_entrega(self, request, pk=None):
+        ordem = self.get_object()
+        ser = PropostaEntregaSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        services.propor_entrega(ordem, request.user, ser.validated_data)
+        return self._detalhe(ordem, status.HTTP_201_CREATED)
+
+    # --- ENT002 ---
+    @action(detail=True, methods=['post'], url_path='avaliar-entrega')
+    def avaliar_entrega(self, request, pk=None):
+        ordem = self.get_object()
+        services.avaliar_entrega(ordem, request.user, request.data.get('acao'),
+                                 request.data.get('justificativa', ''))
+        return self._detalhe(ordem)
+
+    @action(detail=True, methods=['post'], url_path='confirmar-recebimento')
+    def confirmar_recebimento(self, request, pk=None):
+        ordem = services.confirmar_recebimento(self.get_object(), request.user)
+        return self._detalhe(ordem)
 
 
 # ---------------------------------------------------------------------------
