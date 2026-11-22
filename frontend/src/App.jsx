@@ -7,6 +7,8 @@ import Cadastro from './pages/Cadastro'
 import Login from './pages/Login'
 import MeusPedidos from './pages/MeusPedidos'
 import MinhasPropostas from './pages/MinhasPropostas'
+import OrcamentoDetalhe from './pages/OrcamentoDetalhe'
+import Orcamentos from './pages/Orcamentos'
 import PedidoDetalhe from './pages/PedidoDetalhe'
 import ProjetoDesigner from './pages/ProjetoDesigner'
 import ProjetosDisponiveis from './pages/ProjetosDisponiveis'
@@ -19,6 +21,8 @@ const ROTAS = [
   ['/projetos', ProjetosDisponiveis, ['DESIGNER']],
   ['/projetos/:id', ProjetoDesigner, ['DESIGNER']],
   ['/minhas-propostas', MinhasPropostas, ['DESIGNER']],
+  ['/orcamentos', Orcamentos, []],
+  ['/orcamentos/:id', OrcamentoDetalhe, []],
 ]
 
 function Redirecionar({ para }) {
