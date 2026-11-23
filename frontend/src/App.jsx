@@ -9,6 +9,8 @@ import Login from './pages/Login'
 import { MeusProjetos, OrdensDisponiveis } from './pages/Marceneiro'
 import MeusPedidos from './pages/MeusPedidos'
 import MinhasPropostas from './pages/MinhasPropostas'
+import OrcamentoDetalhe from './pages/OrcamentoDetalhe'
+import Orcamentos from './pages/Orcamentos'
 import OrdemDetalhe from './pages/OrdemDetalhe'
 import PedidoDetalhe from './pages/PedidoDetalhe'
 import ProjetoDesigner from './pages/ProjetoDesigner'
@@ -26,6 +28,8 @@ const ROTAS = [
   ['/meus-projetos', MeusProjetos, ['MARCENEIRO']],
   ['/ordens/:id', OrdemDetalhe, []],
   ['/historico', Historico, []],
+  ['/orcamentos', Orcamentos, []],
+  ['/orcamentos/:id', OrcamentoDetalhe, []],
 ]
 
 function Redirecionar({ para }) {

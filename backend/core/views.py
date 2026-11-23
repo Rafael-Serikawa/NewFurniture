@@ -12,13 +12,14 @@ from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 
-from . import services
-from .models import (Cliente, Designer, Marceneiro, Necessidade, Notificacao, OrdemServico,
-                     Pagamento, PropostaTecnica, Usuario)
+from . import analitico, services
+from .models import (Cliente, Designer, Marceneiro, Necessidade, Notificacao, OrcamentoFinal,
+                     OrdemServico, Pagamento, PropostaTecnica, Usuario)
 from .permissions import EhCliente, EhDesigner, EhMarceneiro
 from .serializers import (DadosPagamentoSerializer, LoginSerializer, MaterialSerializer,
                           NecessidadeDetalheSerializer, NecessidadeSerializer,
-                          NotificacaoSerializer, OrdemServicoDetalheSerializer,
+                          NotificacaoSerializer, OrcamentoFinalDetalheSerializer,
+                          OrcamentoFinalSerializer, OrdemServicoDetalheSerializer,
                           OrdemServicoSerializer, PagamentoSerializer, PropostaEntregaSerializer,
                           PropostaMarcenariaSerializer, PropostaTecnicaSerializer,
                           RegistroSerializer, UsuarioSerializer)
@@ -325,6 +326,64 @@ class OrdemServicoViewSet(viewsets.ReadOnlyModelViewSet):
     def confirmar_recebimento(self, request, pk=None):
         ordem = services.confirmar_recebimento(self.get_object(), request.user)
         return self._detalhe(ordem)
+
+
+# ---------------------------------------------------------------------------
+# Orçamento final (entidade multidimensional) e totalizações
+# ---------------------------------------------------------------------------
+class OrcamentoFinalViewSet(viewsets.ReadOnlyModelViewSet):
+
+    def get_serializer_class(self):
+        return OrcamentoFinalDetalheSerializer if self.action == 'retrieve' else OrcamentoFinalSerializer
+
+    def get_queryset(self):
+        user = self.request.user
+        papel = _papel(self.request)
+        qs = OrcamentoFinal.objects.select_related(
+            'ordem__marceneiro', 'ordem__proposta_tecnica__designer',
+            'ordem__proposta_tecnica__necessidade__cliente',
+        ).prefetch_related('ordem__proposta_tecnica__materiais').order_by('-ordem__criado_em', '-id')
+        if papel == T.CLIENTE:
+            qs = qs.filter(ordem__proposta_tecnica__necessidade__cliente_id=user.pk)
+        elif papel == T.DESIGNER:
+            qs = qs.filter(ordem__proposta_tecnica__designer_id=user.pk)
+        elif papel == T.MARCENEIRO:
+            qs = qs.filter(ordem__marceneiro_id=user.pk)
+        elif papel != 'ADMIN':
+            qs = qs.none()
+        if self.request.query_params.get('incluir_cancelados') != '1':
+            qs = qs.exclude(ordem__estado=OrdemServico.Estado.CANCELADA)
+        return qs
+
+    @action(detail=False)
+    def totalizacao(self, request):
+        """GET /api/orcamentos/totalizacao/?dimensao=tipo_ambiente"""
+        dimensao = request.query_params.get('dimensao', 'tipo_ambiente')
+        try:
+            dados = analitico.totalizar(self.get_queryset(), dimensao)
+        except ValueError as erro:
+            raise ValidationError({'detail': str(erro)})
+        return Response(dados)
+
+    @action(detail=False)
+    def cubo(self, request):
+        """GET /api/orcamentos/cubo/?linhas=tipo_ambiente&colunas=estado&medida=preco_total"""
+        p = request.query_params
+        try:
+            dados = analitico.cubo(self.get_queryset(), p.get('linhas', 'tipo_ambiente'),
+                                   p.get('colunas', 'estado'), p.get('medida', 'preco_total'))
+        except ValueError as erro:
+            raise ValidationError({'detail': str(erro)})
+        return Response(dados)
+
+    @action(detail=False)
+    def dimensoes(self, request):
+        """Lista as dimensões e medidas disponíveis para montar o cubo."""
+        return Response({
+            'dimensoes': [{'chave': k, 'rotulo': v} for k, v in analitico.DIMENSOES.items()],
+            'medidas': [{'chave': k, 'rotulo': v} for k, v in analitico.MEDIDAS.items()],
+            'medidas_material': analitico.MEDIDAS_MATERIAL,
+        })
 
 
 # ---------------------------------------------------------------------------

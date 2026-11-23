@@ -308,6 +308,71 @@ class OrdemServicoDetalheSerializer(OrdemServicoSerializer):
         return PagamentoSerializer(qs.order_by('data_transacao', 'id'), many=True).data
 
 
+# ---------------------------------------------------------------------------
+# Orçamento final (entidade multidimensional)
+# ---------------------------------------------------------------------------
+class OrcamentoFinalSerializer(serializers.ModelSerializer):
+    ordem_id = serializers.IntegerField(read_only=True)
+    ordem_estado = serializers.CharField(source='ordem.estado', read_only=True)
+    ordem_estado_display = serializers.CharField(source='ordem.get_estado_display', read_only=True)
+    titulo = serializers.CharField(source='ordem.proposta_tecnica.necessidade.titulo', read_only=True)
+    codigo = serializers.CharField(source='ordem.proposta_tecnica.necessidade.codigo', read_only=True)
+    tipo_ambiente = serializers.CharField(source='ordem.proposta_tecnica.necessidade.tipo_ambiente',
+                                          read_only=True)
+    tipo_ambiente_display = serializers.CharField(
+        source='ordem.proposta_tecnica.necessidade.get_tipo_ambiente_display', read_only=True)
+    cidade = serializers.CharField(source='ordem.proposta_tecnica.necessidade.cidade', read_only=True)
+    cliente_nome = serializers.CharField(source='ordem.proposta_tecnica.necessidade.cliente.nome',
+                                         read_only=True)
+    designer_nome = serializers.CharField(source='ordem.proposta_tecnica.designer.nome', read_only=True)
+    marceneiro_nome = serializers.CharField(source='ordem.marceneiro.nome', read_only=True, default=None)
+
+    class Meta:
+        model = OrcamentoFinal
+        fields = ['id', 'ordem_id', 'ordem_estado', 'ordem_estado_display', 'titulo', 'codigo',
+                  'tipo_ambiente', 'tipo_ambiente_display', 'cidade', 'cliente_nome', 'designer_nome',
+                  'marceneiro_nome', 'qtde_materiais', 'custo_materiais', 'horas_marceneiro',
+                  'valor_hora', 'custo_mao_obra', 'comissao_designer', 'preco_total',
+                  'mao_obra_confirmada', 'atualizado_em']
+
+
+class OrcamentoFinalDetalheSerializer(OrcamentoFinalSerializer):
+    materiais = serializers.SerializerMethodField()
+    materiais_por_tipo = serializers.SerializerMethodField()
+    pagamentos = serializers.SerializerMethodField()
+
+    class Meta(OrcamentoFinalSerializer.Meta):
+        fields = OrcamentoFinalSerializer.Meta.fields + ['materiais', 'materiais_por_tipo', 'pagamentos']
+
+    def _materiais(self, obj):
+        return list(obj.ordem.proposta_tecnica.materiais.all())
+
+    def get_materiais(self, obj):
+        return MaterialSerializer(self._materiais(obj), many=True).data
+
+    def get_materiais_por_tipo(self, obj):
+        """Subtotais por tipo de material (quantidade e custo)."""
+        grupos = {}
+        for m in self._materiais(obj):
+            g = grupos.setdefault(m.tipo_material, {
+                'tipo_material': m.tipo_material, 'rotulo': m.get_tipo_material_display(),
+                'itens': 0, 'quantidade': 0.0, 'custo': 0.0})
+            g['itens'] += 1
+            g['quantidade'] += float(m.quantidade)
+            g['custo'] += float(m.custo_total)
+        return [{**g, 'quantidade': round(g['quantidade'], 2), 'custo': round(g['custo'], 2)}
+                for g in grupos.values()]
+
+    def get_pagamentos(self, obj):
+        user = _usuario_logado(self)
+        ordem = obj.ordem
+        if not user or not (user.is_staff or ordem.necessidade.cliente_id == user.pk):
+            return []
+        qs = Pagamento.objects.filter(
+            Q(proposta_tecnica=ordem.proposta_tecnica) | Q(proposta_marcenaria__ordem=ordem))
+        return PagamentoSerializer(qs.order_by('data_transacao', 'id'), many=True).data
+
+
 class NotificacaoSerializer(serializers.ModelSerializer):
     class Meta:
         model = Notificacao
