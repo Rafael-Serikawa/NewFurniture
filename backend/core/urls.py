@@ -4,6 +4,9 @@ from rest_framework.routers import DefaultRouter
 from . import views
 
 router = DefaultRouter()
+router.register('necessidades', views.NecessidadeViewSet, basename='necessidade')
+router.register('propostas-tecnicas', views.PropostaTecnicaViewSet, basename='proposta-tecnica')
+router.register('ordens', views.OrdemServicoViewSet, basename='ordem')
 router.register('notificacoes', views.NotificacaoViewSet, basename='notificacao')
 
 urlpatterns = [

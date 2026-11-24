@@ -4,11 +4,28 @@ import Navbar from './components/Navbar'
 import { Carregando } from './components/ui'
 import { casar, navegar, useRota } from './router'
 import Cadastro from './pages/Cadastro'
+import Historico from './pages/Historico'
 import Login from './pages/Login'
+import { MeusProjetos, OrdensDisponiveis } from './pages/Marceneiro'
+import MeusPedidos from './pages/MeusPedidos'
+import MinhasPropostas from './pages/MinhasPropostas'
+import OrdemDetalhe from './pages/OrdemDetalhe'
+import PedidoDetalhe from './pages/PedidoDetalhe'
+import ProjetoDesigner from './pages/ProjetoDesigner'
+import ProjetosDisponiveis from './pages/ProjetosDisponiveis'
 import Sobre from './pages/Sobre'
 
 // [padrão, componente, perfis permitidos (vazio = qualquer usuário logado)]
 const ROTAS = [
+  ['/pedidos', MeusPedidos, ['CLIENTE']],
+  ['/pedidos/:id', PedidoDetalhe, ['CLIENTE']],
+  ['/projetos', ProjetosDisponiveis, ['DESIGNER']],
+  ['/projetos/:id', ProjetoDesigner, ['DESIGNER']],
+  ['/minhas-propostas', MinhasPropostas, ['DESIGNER']],
+  ['/ordens-disponiveis', OrdensDisponiveis, ['MARCENEIRO']],
+  ['/meus-projetos', MeusProjetos, ['MARCENEIRO']],
+  ['/ordens/:id', OrdemDetalhe, []],
+  ['/historico', Historico, []],
 ]
 
 function Redirecionar({ para }) {
