@@ -1,5 +1,4 @@
 from django.conf import settings
-from django.conf.urls.static import static
 from django.contrib import admin
 from django.http import FileResponse, HttpResponse
 from django.urls import include, path, re_path
@@ -25,7 +24,7 @@ urlpatterns = [
     path('api-auth/', include('rest_framework.urls')),  # login da API navegável
     re_path(r'^assets/(?P<path>.*)$', serve, {'document_root': settings.FRONTEND_DIST / 'assets'}),
     re_path(r'^(?P<path>logo\.svg)$', serve, {'document_root': settings.FRONTEND_DIST}),
+    # arquivos enviados (fotos, desenhos) — servidos pelo Django também com DEBUG=False
+    re_path(r'^media/(?P<path>.*)$', serve, {'document_root': settings.MEDIA_ROOT}),
     path('', frontend_index),
 ]
-
-urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

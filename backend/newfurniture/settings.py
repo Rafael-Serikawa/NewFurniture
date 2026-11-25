@@ -4,14 +4,18 @@ Configurações do projeto NewFurniture (PMR3304 - Sistemas de Informação).
 Backend: Django + Django REST Framework + SQLite.
 Autenticação da API: Token (rest_framework.authtoken).
 """
+import os
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# ATENÇÃO: chave apenas para desenvolvimento/apresentação.
-SECRET_KEY = 'django-insecure-newfurniture-pmr3304-2026-troque-em-producao'
-DEBUG = True
+# Em produção (Render) defina DJANGO_SECRET_KEY e DJANGO_DEBUG=0 nas variáveis de ambiente.
+SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY', 'django-insecure-newfurniture-pmr3304-2026-troque-em-producao')
+DEBUG = os.environ.get('DJANGO_DEBUG', '1') == '1'
 ALLOWED_HOSTS = ['*']
+CSRF_TRUSTED_ORIGINS = ['https://*.onrender.com']
+# O Render termina o HTTPS no proxy: assim o Django gera links https (imagens, admin).
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -35,6 +39,13 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
+
+# WhiteNoise serve os arquivos estáticos (admin, API navegável) em produção.
+try:
+    import whitenoise  # noqa: F401
+    MIDDLEWARE.insert(2, 'whitenoise.middleware.WhiteNoiseMiddleware')
+except ImportError:
+    pass
 
 ROOT_URLCONF = 'newfurniture.urls'
 
@@ -78,6 +89,7 @@ USE_I18N = True
 USE_TZ = True
 
 STATIC_URL = 'static/'
+STATIC_ROOT = BASE_DIR / 'staticfiles'
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
