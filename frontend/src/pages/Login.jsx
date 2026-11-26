@@ -4,12 +4,6 @@ import { Logo } from '../components/Navbar'
 import { Alerta, Campo } from '../components/ui'
 import { Link, navegar } from '../router'
 
-const DEMOS = [
-  ['Cliente', 'ana@cliente.com'],
-  ['Designer', 'carla@designer.com'],
-  ['Marceneiro', 'eduardo@marceneiro.com'],
-]
-
 export function Fluxo() {
   return (
     <ol className="fluxo">
@@ -81,16 +75,6 @@ export default function Login() {
           <p className="centro">
             Ainda não tem conta? <Link para="/cadastro">Cadastre-se</Link>
           </p>
-          <div className="demo">
-            <span>Contas de demonstração (senha: senha123)</span>
-            <div>
-              {DEMOS.map(([papel, mail]) => (
-                <button key={mail} type="button" className="botao botao-contorno botao-pequeno" disabled={enviando} onClick={(e) => fazerLogin(e, [mail, 'senha123'])}>
-                  {papel}
-                </button>
-              ))}
-            </div>
-          </div>
         </form>
       </main>
     </div>
