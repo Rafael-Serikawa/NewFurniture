@@ -33,9 +33,6 @@ export default function Checkout({ aberto, titulo, itens, total, observacao, aoF
     }
   }
 
-  const preencherDemo = () =>
-    setForm({ nome_titular: 'CLIENTE DEMO', numero_cartao: '4111 1111 1111 1111', validade: '12/29', cvv: '123' })
-
   return (
     <Modal aberto={aberto} aoFechar={enviando ? undefined : aoFechar} largura={760} titulo={titulo}>
       <div className="checkout">
@@ -77,10 +74,7 @@ export default function Checkout({ aberto, titulo, itens, total, observacao, aoF
             </Campo>
           </div>
           <p className="nota">
-            Pagamento simulado para fins acadêmicos. Cartões terminados em <b>0000</b> são recusados.{' '}
-            <button type="button" className="link" onClick={preencherDemo}>
-              Preencher cartão de teste
-            </button>
+            Pagamento simulado para fins acadêmicos. Cartões terminados em <b>0000</b> são recusados.
           </p>
           <div className="acoes">
             <button type="button" className="botao botao-texto" onClick={aoFechar} disabled={enviando}>
