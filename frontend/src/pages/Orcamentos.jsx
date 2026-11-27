@@ -226,7 +226,7 @@ export default function Orcamentos() {
 
           <section className="bloco">
             <div className="bloco-topo">
-              <h2>Cubo — cruzamento de dimensões</h2>
+              <h2>Cruzamento de dimensões</h2>
               <div className="filtros compactos">
                 <label>
                   Linhas
